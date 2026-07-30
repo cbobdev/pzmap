@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.local
+.DS_Store
+Thumbs.db
+
+# local RFEM sample exports for dev/tests (not published)
+/samples/
+*.rfem-sample.*
