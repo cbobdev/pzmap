@@ -58,16 +58,3 @@ Due esportazioni da RFEM 6, in **XLSX** o **JSON**:
 Trascina entrambi i file nella finestra, oppure usa *Carica dati*. Il file è un **inviluppo**
 (max/min per componente): la combinazione governante non è più ricostruibile dai dati e viene
 indicata come tale, senza inventarla.
-
-## Sviluppo
-
-TypeScript + Vite, **zero dipendenze a runtime** (lettura XLSX e disegno SVG scritti a mano).
-
-```bash
-npm install
-npm run dev       # server di sviluppo
-npm run build     # typecheck + bundle
-npm test          # unit test
-```
-
-Deploy automatico su GitHub Pages ad ogni push su `main` (CI: typecheck, lint, test).
