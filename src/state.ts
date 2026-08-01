@@ -1,5 +1,4 @@
 import { type Comp, type Meta, type NodeRecord } from './types';
-import { type Qty } from './model/quantity';
 
 export interface ViewState {
   k: number;
@@ -8,39 +7,48 @@ export interface ViewState {
 }
 
 export type Lang = 'it' | 'en';
+export type Extreme = 'max' | 'min';
+
+export interface Group {
+  id: number;
+  name: string;
+  color: string;
+  description: string;
+  nodes: number[];
+  visible: boolean;
+}
 
 export interface AppState {
   nodes: NodeRecord[];
   meta: Meta;
   comps: Comp[];
 
-  qty: Qty;
-  uf: number;
+  q: Comp; // active component
+  ext: Extreme; // active extreme
+  win: { lo: number | null; hi: number | null }; // display-limits window (metric units)
+  colF: Record<string, string>; // per-column filter text
+
+  sortKey: string; // column key
+  sortDir: -1 | 1;
+
+  sel: number[]; // multi-selection (node ids)
+  hover: number | null;
+
+  tableOpen: boolean;
+  lblVal: boolean; // value label on every node
+  lblIds: boolean;
+  sizeUniform: boolean; // color-only, uniform dot size
+  pair: boolean; // split-circle max/min for the active component
+  legendHidden: boolean;
+
+  groups: Group[];
+  isolate: number | null; // group id shown alone (hides everything else)
+  colorByGroup: boolean; // color dots by group colour instead of value
+
+  uf: number; // unit factor (SI → display); fixed kN in Phase 1
   un: string;
-  nClass: number;
-
-  breaks: number[];
-  colors: string[];
-  off: Set<number>;
-  ext: { lo: number; hi: number };
-  win: { lo: number | null; hi: number | null };
-  pair: boolean;
-
-  filters: Record<string, string>;
-  sort: { col: string | null; dir: number };
-  sel: number | null;
-  region: Set<number> | null;
 
   view: ViewState;
-
-  showLab: boolean;
-  showVal: boolean;
-  showComb: boolean;
-  allCols: boolean;
-  tableHidden: boolean;
-  pointsOnly: boolean;
-  capacity: number | null; // display units; null → utilization off
-
   lang: Lang;
 }
 
@@ -48,30 +56,31 @@ export const state: AppState = {
   nodes: [],
   meta: { model: '—' },
   comps: [],
-  qty: 'Pz_max',
+  q: 'Pz',
+  ext: 'max',
+  win: { lo: null, hi: null },
+  colF: {},
+  sortKey: 'Pz_max',
+  sortDir: -1,
+  sel: [],
+  hover: null,
+  tableOpen: true,
+  lblVal: false,
+  lblIds: false,
+  sizeUniform: false,
+  pair: false,
+  legendHidden: false,
+  groups: [],
+  isolate: null,
+  colorByGroup: false,
   uf: 0.001,
   un: 'kN',
-  nClass: 7,
-  breaks: [],
-  colors: [],
-  off: new Set(),
-  ext: { lo: 0, hi: 1 },
-  win: { lo: null, hi: null },
-  pair: false,
-  filters: {},
-  sort: { col: null, dir: 1 },
-  sel: null,
-  region: null,
   view: { k: 1, tx: 0, ty: 0 },
-  showLab: false,
-  showVal: false,
-  showComb: false,
-  allCols: false,
-  tableHidden: false,
-  pointsOnly: false,
-  capacity: null,
   lang: 'it',
 };
+
+/** Active quantity key (`Pz_max` etc.) derived from component + extreme. */
+export const activeQty = (s: AppState = state): string => `${s.q}_${s.ext}`;
 
 type Listener = () => void;
 const listeners = new Set<Listener>();

@@ -1,92 +1,91 @@
 import { type Meta, type NodeRecord } from '../types';
-import { state, type AppState } from '../state';
+import {
+  state,
+  type AppState,
+  type Extreme,
+  type Lang,
+  type Group,
+} from '../state';
+
+export interface PersistedView {
+  q: string;
+  ext: Extreme;
+  win: { lo: number | null; hi: number | null };
+  colF: Record<string, string>;
+  sortKey: string;
+  sortDir: -1 | 1;
+  sel: number[];
+  tableOpen: boolean;
+  lblVal: boolean;
+  lblIds: boolean;
+  sizeUniform: boolean;
+  pair: boolean;
+  legendHidden: boolean;
+  groups: Group[];
+  isolate: number | null;
+  colorByGroup: boolean;
+  lang: Lang;
+}
 
 export interface ProjectFile {
   format: 'pzmap';
-  version: 1;
+  version: 2;
   meta: Meta;
   nodes: NodeRecord[];
   view: PersistedView;
 }
 
-export interface PersistedView {
-  qty: string;
-  uf: number;
-  un: string;
-  nClass: number;
-  pair: boolean;
-  win: { lo: number | null; hi: number | null };
-  filters: Record<string, string>;
-  off: number[];
-  sort: { col: string | null; dir: number };
-  showLab: boolean;
-  showVal: boolean;
-  showComb: boolean;
-  allCols: boolean;
-  tableHidden: boolean;
-  pointsOnly: boolean;
-  capacity: number | null;
-  sel: number | null;
-  camera: { kw: number; cx: number; cy: number };
-  lang: string;
-}
-
-export function captureView(s: AppState, W: number, H: number): PersistedView {
-  const k = s.view.k || 1;
+export function captureView(s: AppState): PersistedView {
   return {
-    qty: s.qty,
-    uf: s.uf,
-    un: s.un,
-    nClass: s.nClass,
-    pair: s.pair,
+    q: s.q,
+    ext: s.ext,
     win: { lo: s.win.lo, hi: s.win.hi },
-    filters: s.filters,
-    off: [...s.off],
-    sort: s.sort,
-    showLab: s.showLab,
-    showVal: s.showVal,
-    showComb: s.showComb,
-    allCols: s.allCols,
-    tableHidden: s.tableHidden,
-    pointsOnly: s.pointsOnly,
-    capacity: s.capacity,
+    colF: s.colF,
+    sortKey: s.sortKey,
+    sortDir: s.sortDir,
     sel: s.sel,
-    camera: { kw: k / W, cx: (W / 2 - s.view.tx) / k, cy: (H / 2 - s.view.ty) / k },
+    tableOpen: s.tableOpen,
+    lblVal: s.lblVal,
+    lblIds: s.lblIds,
+    sizeUniform: s.sizeUniform,
+    pair: s.pair,
+    legendHidden: s.legendHidden,
+    groups: s.groups,
+    isolate: s.isolate,
+    colorByGroup: s.colorByGroup,
     lang: s.lang,
   };
 }
 
-/** Apply a persisted view onto state (validating the quantity against options). */
-export function applyView(s: AppState, v: PersistedView, hasQty: (q: string) => boolean): void {
-  if (v.qty && hasQty(v.qty)) s.qty = v.qty;
-  if (v.uf) {
-    s.uf = v.uf;
-    s.un = v.un || s.un;
-  }
-  if (v.nClass) s.nClass = v.nClass;
-  s.pair = !!v.pair && s.qty[0] !== '|';
+export function applyView(s: AppState, v: PersistedView, hasComp: (c: string) => boolean): void {
+  if (v.q && hasComp(v.q)) s.q = v.q as AppState['q'];
+  if (v.ext === 'max' || v.ext === 'min') s.ext = v.ext;
   s.win = { lo: v.win ? v.win.lo : null, hi: v.win ? v.win.hi : null };
-  s.filters = v.filters || {};
-  s.off = new Set(v.off || []);
-  s.sort = v.sort || { col: null, dir: 1 };
-  s.showLab = !!v.showLab;
-  s.showVal = !!v.showVal;
-  s.showComb = !!v.showComb;
-  s.allCols = !!v.allCols;
-  s.tableHidden = !!v.tableHidden;
-  s.pointsOnly = !!v.pointsOnly;
-  s.capacity = v.capacity ?? null;
-  s.sel = v.sel ?? null;
+  s.colF = v.colF || {};
+  s.sortKey = v.sortKey || `${s.q}_${s.ext}`;
+  s.sortDir = v.sortDir === 1 ? 1 : -1;
+  s.sel = Array.isArray(v.sel) ? v.sel : [];
+  s.tableOpen = v.tableOpen !== false;
+  s.lblVal = !!v.lblVal;
+  s.lblIds = !!v.lblIds;
+  s.sizeUniform = !!v.sizeUniform;
+  s.pair = !!v.pair;
+  s.legendHidden = !!v.legendHidden;
+  s.groups = Array.isArray(v.groups)
+    ? (v.groups as Partial<Group>[]).map((g) => ({ description: '', visible: true, ...g }) as Group)
+    : [];
+  s.isolate = typeof v.isolate === 'number' ? v.isolate : null;
+  s.colorByGroup = !!v.colorByGroup;
   if (v.lang === 'it' || v.lang === 'en') s.lang = v.lang;
 }
 
-export function buildProject(W: number, H: number): ProjectFile {
+export function buildProject(): ProjectFile {
   return {
     format: 'pzmap',
-    version: 1,
+    version: 2,
     meta: { ...state.meta, savedAt: new Date().toISOString() },
     nodes: state.nodes,
-    view: captureView(state, W, H),
+    view: captureView(state),
   };
 }
 

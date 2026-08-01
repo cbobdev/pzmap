@@ -1,176 +1,122 @@
 import { $ } from '../dom';
-import { state, emit, fmt } from '../state';
+import { state, emit, fmt, activeQty } from '../state';
 import { t } from '../i18n';
-import { compOf, qtyLabel, unitOf, seriesVals } from '../model/quantity';
-import { niceStep, utilColor } from '../model/scale';
-import {
-  baseRows,
-  classOfState,
-  inWin,
-  valDec,
-  winLo,
-  winHi,
-  recolor,
-  utilizationActive,
-} from '../derive';
-import { utilization } from '../model/utilization';
+import { qtyLabel, unitOf } from '../model/quantity';
+import { valueGradient } from '../model/color';
+import { metricRange, signDomain, winLo, winHi, winActive, decimals } from '../derive';
 
-export function setWin(lo: number | null, hi: number | null): void {
-  if (lo != null) state.win.lo = lo;
-  if (hi != null) state.win.hi = hi;
-  if (state.win.lo != null && state.win.hi != null && state.win.lo > state.win.hi) {
-    const tmp = state.win.lo;
-    state.win.lo = state.win.hi;
-    state.win.hi = tmp;
-  }
-  state.off.clear();
-  recolor();
-  emit();
-}
-
-export function resetWin(): void {
-  state.win = { lo: null, hi: null };
-  state.off.clear();
-  recolor();
-  emit();
-}
-
-const UTIL_BANDS = [0, 0.25, 0.5, 0.75, 1, Infinity];
+const clampPct = (n: number): number => Math.max(0, Math.min(100, n));
 
 export function drawLegend(): void {
   const legend = $('#legend');
-  const rng = $('#rng');
-  if (!state.nodes.length || state.pointsOnly) {
-    legend.classList.add('hidden');
+  if (!state.nodes.length || state.legendHidden) {
+    legend.style.display = 'none';
     return;
   }
-  legend.classList.remove('hidden');
+  legend.style.display = '';
 
-  if (utilizationActive()) {
-    rng.style.display = 'none';
-    $('#legTitle').textContent =
-      `${t('legUtil')} · ${qtyLabel(state.qty)} / ${fmt(state.capacity!, valDec())} ${unitOf(state.qty, state.un)}`;
-    const rows = baseRows();
-    const counts = new Array(UTIL_BANDS.length - 1).fill(0);
-    for (const r of rows) {
-      const u = utilization(r, state.qty, state.uf, state.capacity!);
-      for (let i = 0; i < UTIL_BANDS.length - 1; i++)
-        if (u >= UTIL_BANDS[i]! && u < UTIL_BANDS[i + 1]!) {
-          counts[i]++;
-          break;
-        }
-    }
-    const cmax = Math.max(...counts, 1);
-    let h = '';
-    for (let i = UTIL_BANDS.length - 2; i >= 0; i--) {
-      const lo = UTIL_BANDS[i]! * 100,
-        hi = UTIL_BANDS[i + 1]!;
-      const lab = hi === Infinity ? `> 100%` : `${lo.toFixed(0)}–${(hi * 100).toFixed(0)}%`;
-      h += `<div class="lrow"><span class="sw" style="background:${utilColor(Math.min(0.999, UTIL_BANDS[i]! + 0.12))}"></span>
-        <span class="rg">${lab}</span>
-        <span class="hb"><i style="width:${(100 * counts[i]) / cmax}%"></i></span>
-        <span class="ct">${counts[i] || ''}</span></div>`;
-    }
-    $('#legBody').innerHTML = h;
+  const byGroup = state.colorByGroup;
+  ($('#legScale') as HTMLElement).style.display = byGroup ? 'none' : '';
+  ($('#legGroups') as HTMLElement).style.display = byGroup ? 'flex' : 'none';
+
+  if (byGroup) {
+    $('#legTitle').textContent = t('secGroups');
+    const rows = state.groups
+      .map(
+        (g) =>
+          `<div style="display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:7px;font-size:11.5px">
+            <span style="width:12px;height:12px;border-radius:3px;background:${g.color};border:1px solid rgba(0,0,0,.15)"></span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.name}${g.description ? ' · ' + g.description : ''}</span>
+            <span class="muted num">n° ${g.nodes.length}</span>
+          </div>`,
+      )
+      .join('');
+    ($('#legGroups') as HTMLElement).innerHTML =
+      rows ||
+      `<div class="muted" style="font-size:11px">${state.lang === 'it' ? 'Nessun gruppo' : 'No groups'}</div>`;
     return;
   }
 
-  rng.style.display = '';
-  const b = state.breaks;
-  const rows = baseRows();
-  const counts = new Array(b.length - 1).fill(0);
-  for (const r of rows)
-    for (const v of seriesVals(r, state.qty, state.uf, state.pair))
-      if (inWin(v)) counts[classOfState(v)]++;
-  const cmax = Math.max(...counts, 1);
-  const d = valDec();
-  const c = compOf(state.qty);
-  $('#legTitle').textContent =
-    (state.pair ? `${c} max / min` : qtyLabel(state.qty)) + ` [${unitOf(state.qty, state.un)}]`;
-
-  let h = '';
-  for (let i = b.length - 2; i >= 0; i--) {
-    const zero = b[i + 1] === 0 ? '<div class="lzero"></div>' : '';
-    h +=
-      zero +
-      `<div class="lrow${state.off.has(i) ? ' off' : ''}" data-c="${i}">
-        <span class="sw" style="background:${state.colors[i]}"></span>
-        <span class="rg">${fmt(b[i]!, d)}…${fmt(b[i + 1]!, d)}</span>
-        <span class="hb"><i style="width:${(100 * counts[i]) / cmax}%"></i></span>
-        <span class="ct">${counts[i] || ''}</span></div>`;
-  }
-  const body = $('#legBody');
-  body.innerHTML = h;
-  body.querySelectorAll<HTMLElement>('.lrow').forEach((e) => {
-    e.onclick = (): void => {
-      const cc = +e.dataset.c!;
-      if (state.off.has(cc)) state.off.delete(cc);
-      else state.off.add(cc);
-      emit();
-    };
-  });
+  $('#legTitle').textContent = `${qtyLabel(activeQty())} · ${unitOf(activeQty(), state.un)}`;
+  ($('#legGrad') as HTMLElement).style.background = valueGradient(
+    metricRange().min,
+    metricRange().max,
+    signDomain(),
+  );
+  updateSlider();
 }
 
-/* --- range slider --- */
-function trackValue(clientX: number): number {
-  const tr = $('#rTrack').getBoundingClientRect();
-  const u = Math.max(0, Math.min(1, (clientX - tr.left) / tr.width));
-  const v = state.ext.lo + u * (state.ext.hi - state.ext.lo);
-  const snap = niceStep((state.ext.hi - state.ext.lo) / 120);
-  return Math.round(v / snap) * snap;
-}
-
-export function updateRange(): void {
+function updateSlider(): void {
+  const e = metricRange();
   const lo = winLo(),
-    hi = winHi(),
-    e = state.ext,
-    d = valDec();
-  const u = (v: number): number => (100 * (v - e.lo)) / (e.hi - e.lo || 1);
-  const a = Math.max(0, Math.min(100, u(lo))),
-    b = Math.max(0, Math.min(100, u(hi)));
-  ($('#rH0') as HTMLElement).style.left = a + '%';
-  ($('#rH1') as HTMLElement).style.left = b + '%';
-  const fill = $('#rFill') as HTMLElement;
-  fill.style.left = a + '%';
-  fill.style.width = Math.max(0, b - a) + '%';
-  const rLo = $('#rLo') as HTMLInputElement,
-    rHi = $('#rHi') as HTMLInputElement;
-  if (document.activeElement !== rLo) rLo.value = fmt(lo, d);
-  if (document.activeElement !== rHi) rHi.value = fmt(hi, d);
-  ($('#rReset') as HTMLElement).style.visibility =
-    state.win.lo == null && state.win.hi == null ? 'hidden' : 'visible';
+    hi = winHi();
+  const u = (v: number): number => (100 * (v - e.min)) / (e.max - e.min || 1);
+  const a = clampPct(u(lo)),
+    b = clampPct(u(hi));
+  ($('#legH0') as HTMLElement).style.left = `${a}%`;
+  ($('#legH1') as HTMLElement).style.left = `${b}%`;
+  const fill = $('#legFill') as HTMLElement;
+  fill.style.left = `${a}%`;
+  fill.style.width = `${Math.max(0, b - a)}%`;
+  const d = decimals();
+  const loI = $('#legLo') as HTMLInputElement,
+    hiI = $('#legHi') as HTMLInputElement;
+  if (document.activeElement !== loI) loI.value = fmt(lo, d);
+  if (document.activeElement !== hiI) hiI.value = fmt(hi, d);
+  ($('#legReset') as HTMLElement).style.visibility = winActive() ? 'visible' : 'hidden';
 }
 
-export function initRange(): void {
-  for (const id of ['rH0', 'rH1']) {
+function setWin(lo: number | null, hi: number | null): void {
+  if (lo != null) state.win.lo = lo;
+  if (hi != null) state.win.hi = hi;
+  if (state.win.lo != null && state.win.hi != null && state.win.lo > state.win.hi) {
+    const t0 = state.win.lo;
+    state.win.lo = state.win.hi;
+    state.win.hi = t0;
+  }
+  emit();
+}
+
+function trackValue(clientX: number): number {
+  const tr = $('#legTrack').getBoundingClientRect();
+  const e = metricRange();
+  const u = Math.max(0, Math.min(1, (clientX - tr.left) / tr.width));
+  return e.min + u * (e.max - e.min);
+}
+
+export function initLegend(): void {
+  for (const id of ['legH0', 'legH1']) {
     const h = $('#' + id) as HTMLElement;
     let on = false;
-    h.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      h.setPointerCapture(e.pointerId);
+    h.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      h.setPointerCapture(ev.pointerId);
       on = true;
     });
-    h.addEventListener('pointermove', (e) => {
+    h.addEventListener('pointermove', (ev) => {
       if (!on) return;
-      const v = trackValue(e.clientX);
-      if (id === 'rH0') setWin(v, null);
+      const v = trackValue(ev.clientX);
+      if (id === 'legH0') setWin(v, null);
       else setWin(null, v);
     });
     h.addEventListener('pointerup', () => (on = false));
   }
   const parse = (s: string): number | null => {
-    const v = parseFloat(String(s).replace(/\./g, '').replace(',', '.'));
+    const v = parseFloat(String(s).replace(/\s/g, '').replace(',', '.'));
     return Number.isFinite(v) ? v : null;
   };
-  ($('#rLo') as HTMLInputElement).onchange = (e): void => {
+  ($('#legLo') as HTMLInputElement).onchange = (e): void => {
     const v = parse((e.target as HTMLInputElement).value);
     if (v != null) setWin(v, null);
-    else updateRange();
+    else updateSlider();
   };
-  ($('#rHi') as HTMLInputElement).onchange = (e): void => {
+  ($('#legHi') as HTMLInputElement).onchange = (e): void => {
     const v = parse((e.target as HTMLInputElement).value);
     if (v != null) setWin(null, v);
-    else updateRange();
+    else updateSlider();
   };
-  ($('#rReset') as HTMLElement).onclick = resetWin;
+  ($('#legReset') as HTMLElement).onclick = (): void => {
+    state.win = { lo: null, hi: null };
+    emit();
+  };
 }

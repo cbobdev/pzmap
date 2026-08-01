@@ -8,4 +8,9 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
   },
+  // Repo lives on the Windows mount (/mnt/c) under WSL2, where inotify file
+  // events don't fire — poll so edits actually trigger HMR.
+  server: {
+    watch: { usePolling: true, interval: 200 },
+  },
 });
